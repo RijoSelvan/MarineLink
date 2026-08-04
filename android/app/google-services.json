@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "314684599012",
+    "project_id": "marinelink-c431d",
+    "storage_bucket": "marinelink-c431d.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:314684599012:android:ad12bf74cc1cb7d639daf1",
+        "android_client_info": {
+          "package_name": "com.example.fish_export_management"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCklvFkgv6GiXzE8k2n3s96vewOF2uIBYM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
