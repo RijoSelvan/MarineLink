@@ -181,78 +181,120 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xff0A4D68),
-
-      body: Center(
-        child: Column(
-          mainAxisAlignment:
-              MainAxisAlignment.center,
-
-          children: [
-            // ===========================
-            // LOGO
-            // ===========================
-
-            const Icon(
-              Icons.anchor,
-              size: 120,
-              color: Colors.white,
-            ),
-
-            const SizedBox(height: 20),
-
-            // ===========================
-            // APP NAME
-            // ===========================
-
-            const Text(
-              'MaarinLink',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 34,
-                fontWeight: FontWeight.bold,
+      body: Container(
+        width: double.infinity,
+        height: double.infinity,
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              Color(0xFF061A28),
+              Color(0xFF0A4D68),
+              Color(0xFF088395),
+            ],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ),
+        ),
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // Glowing Emblem
+              Container(
+                width: 130,
+                height: 130,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    colors: [
+                      Colors.white.withValues(alpha: 0.2),
+                      Colors.white.withValues(alpha: 0.05),
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.3),
+                    width: 2,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF05BFDB).withValues(alpha: 0.3),
+                      blurRadius: 30,
+                      spreadRadius: 2,
+                    ),
+                  ],
+                ),
+                child: const Center(
+                  child: Icon(
+                    Icons.anchor_rounded,
+                    size: 70,
+                    color: Colors.white,
+                  ),
+                ),
               ),
-            ),
 
-            const SizedBox(height: 10),
+              const SizedBox(height: 28),
 
-            // ===========================
-            // TAGLINE
-            // ===========================
-
-            const Text(
-              'Connecting Marine Businesses',
-              style: TextStyle(
-                color: Colors.white70,
-                fontSize: 16,
+              // App Name
+              const Text(
+                'MarineLink',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 36,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.5,
+                ),
               ),
-            ),
 
-            const SizedBox(height: 50),
+              const SizedBox(height: 10),
 
-            // ===========================
-            // LOADING
-            // ===========================
-
-            const SizedBox(
-              width: 35,
-              height: 35,
-              child: CircularProgressIndicator(
-                strokeWidth: 3,
-                color: Colors.white,
+              // Tagline Pill
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.2),
+                    width: 1,
+                  ),
+                ),
+                child: const Text(
+                  'Global Seafood Export Platform',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: 0.3,
+                  ),
+                ),
               ),
-            ),
 
-            const SizedBox(height: 20),
+              const SizedBox(height: 60),
 
-            const Text(
-              'Loading...',
-              style: TextStyle(
-                color: Colors.white70,
-                fontSize: 14,
+              // Loading Indicator
+              const SizedBox(
+                width: 32,
+                height: 32,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.8,
+                  color: Color(0xFF05BFDB),
+                ),
               ),
-            ),
-          ],
+
+              const SizedBox(height: 16),
+
+              Text(
+                'Connecting Marine Markets...',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.6),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

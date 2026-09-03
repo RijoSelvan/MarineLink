@@ -4,6 +4,8 @@ import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'features/splash/splash_screen.dart';
 
+import 'theme/app_theme.dart';
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -21,16 +23,8 @@ class MarineLinkApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'MaarinLink',
-      theme: ThemeData(
-        primarySwatch: Colors.teal,
-        scaffoldBackgroundColor: const Color(0xffF4F9FF),
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xff0A4D68),
-          foregroundColor: Colors.white,
-          centerTitle: true,
-        ),
-      ),
+      title: 'MarineLink Exports',
+      theme: AppTheme.lightTheme,
       home: const SplashScreen(),
     );
   }
