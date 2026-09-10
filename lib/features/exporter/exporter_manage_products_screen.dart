@@ -1,6 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import '../../utils/category_helper.dart';
+import '../../utils/stock_helper.dart';
+
 
 class ManageProductsScreen extends StatefulWidget {
   const ManageProductsScreen({super.key});
@@ -138,8 +141,330 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
   }
 
   // ============================================================
+  // OUT OF STOCK ACTION
+  // ============================================================
+
+  void confirmSetOutOfStock(
+    String productId,
+    String fishName,
+  ) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: const Row(
+            children: [
+              Icon(Icons.remove_shopping_cart, color: Colors.deepOrange),
+              SizedBox(width: 8),
+              Text('Mark Out of Stock?'),
+            ],
+          ),
+          content: Text(
+            'Are you sure you want to mark "$fishName" as Out of Stock?\n\n'
+            'Buyers will not be able to order this product until you restock it.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.pop(dialogContext);
+                await setOutOfStock(productId, fishName);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.deepOrange,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Mark Out of Stock'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> setOutOfStock(String productId, String fishName) async {
+    try {
+      await _firestore.collection('products').doc(productId).update({
+        'isAvailable': false,
+        'status': 'Out of Stock',
+        'updatedAt': Timestamp.now(),
+      });
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('"$fishName" is now marked as Out of Stock'),
+          backgroundColor: Colors.deepOrange,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to update product: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  // ============================================================
+  // RESTOCK DIALOG (1 box = 50 kg, 1 ton = 20 boxes = 1000 kg)
+  // ============================================================
+
+  void showRestockDialog(
+    String productId,
+    String fishName,
+    int currentStock,
+  ) {
+    final TextEditingController addQtyController =
+        TextEditingController(text: '1');
+    int selectedUnitIndex = 0; // 0: Boxes (x50 kg), 1: Tons (x1000 kg), 2: Kg
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (_, setDialogState) {
+
+            final double enteredVal =
+                double.tryParse(addQtyController.text.trim()) ?? 0;
+            double effectiveAddKg = 0;
+            if (selectedUnitIndex == 0) {
+              // Boxes (1 box = 50 kg)
+              effectiveAddKg = enteredVal * StockHelper.kgPerBox;
+            } else if (selectedUnitIndex == 1) {
+              // Tons (1 ton = 1000 kg = 20 boxes)
+              effectiveAddKg = enteredVal * StockHelper.kgPerTon;
+            } else {
+              // Direct kg
+              effectiveAddKg = enteredVal;
+            }
+
+            final int newTotalKg = (currentStock > 0 ? currentStock : 0) +
+                effectiveAddKg.toInt();
+
+            return AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              title: Row(
+                children: [
+                  const Icon(Icons.add_shopping_cart, color: Color(0xff0A4D68)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Restock $fishName',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.blue.shade200),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.info_outline,
+                              size: 16, color: Color(0xff0A4D68)),
+                          SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              StockHelper.unitReferenceNote,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xff0A4D68),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    const Text(
+                      'Select Unit:',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 8,
+                      children: [
+                        ChoiceChip(
+                          label: const Text('Boxes (50 kg)'),
+                          selected: selectedUnitIndex == 0,
+                          onSelected: (val) {
+                            if (val) {
+                              setDialogState(() {
+                                selectedUnitIndex = 0;
+                                addQtyController.text = '1';
+                              });
+                            }
+                          },
+                        ),
+                        ChoiceChip(
+                          label: const Text('Tons (20 boxes)'),
+                          selected: selectedUnitIndex == 1,
+                          onSelected: (val) {
+                            if (val) {
+                              setDialogState(() {
+                                selectedUnitIndex = 1;
+                                addQtyController.text = '1';
+                              });
+                            }
+                          },
+                        ),
+                        ChoiceChip(
+                          label: const Text('Kg'),
+                          selected: selectedUnitIndex == 2,
+                          onSelected: (val) {
+                            if (val) {
+                              setDialogState(() {
+                                selectedUnitIndex = 2;
+                                addQtyController.text = '50';
+                              });
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: addQtyController,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      decoration: InputDecoration(
+                        labelText: selectedUnitIndex == 0
+                            ? 'Number of Boxes'
+                            : selectedUnitIndex == 1
+                                ? 'Number of Tons'
+                                : 'Quantity in Kg',
+                        prefixIcon: const Icon(Icons.scale),
+                        border: const OutlineInputBorder(),
+                        suffixText: selectedUnitIndex == 0
+                            ? 'boxes'
+                            : selectedUnitIndex == 1
+                                ? 'tons'
+                                : 'kg',
+                      ),
+                      onChanged: (_) => setDialogState(() {}),
+                    ),
+                    const SizedBox(height: 12),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.green.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.green.shade200),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Adding: ${effectiveAddKg.toInt()} kg (${effectiveAddKg ~/ 50} boxes • ${(effectiveAddKg / 1000).toStringAsFixed(2)} tons)',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.green.shade900,
+                              fontSize: 12,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            'New Total Stock: $newTotalKg kg',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.green.shade900,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: effectiveAddKg <= 0
+                      ? null
+                      : () async {
+                          Navigator.pop(dialogContext);
+                          try {
+                            await _firestore
+                                .collection('products')
+                                .doc(productId)
+                                .update({
+                              'quantity': newTotalKg,
+                              'isAvailable': true,
+                              'status': 'Available',
+                              'updatedAt': Timestamp.now(),
+                            });
+                            if (!mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  '"$fishName" restocked to $newTotalKg kg successfully!',
+                                ),
+                                backgroundColor: Colors.green,
+                              ),
+                            );
+                          } catch (e) {
+                            if (!mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Failed to restock: $e'),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xff0A4D68),
+                    foregroundColor: Colors.white,
+                  ),
+                  child: const Text('Confirm Restock'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // ============================================================
   // EDIT PRODUCT
   // ============================================================
+
 
   void showEditProductDialog(
     String productId,
@@ -223,8 +548,9 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
                         decimal: true,
                       ),
                       decoration: const InputDecoration(
-                        labelText: 'Quantity',
+                        labelText: 'Quantity (Kg)',
                         prefixIcon: Icon(Icons.scale),
+                        helperText: '1 Box = 50 kg • 1 Ton = 20 Boxes (1,000 kg)',
                         border: OutlineInputBorder(),
                       ),
                     ),
@@ -327,20 +653,24 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
                     }
 
                     try {
+                      final bool available = quantity > 0;
                       await _firestore
                           .collection('products')
                           .doc(productId)
                           .update({
                         'fishName': fishName,
                         'price': price,
-                        'quantity': quantity,
+                        'quantity': quantity.toInt(),
                         'quality': selectedQuality,
+                        'isAvailable': available,
+                        'status': available ? 'Available' : 'Out of Stock',
                         'location':
                             locationController.text.trim(),
                         'description':
                             descriptionController.text.trim(),
                         'updatedAt': Timestamp.now(),
                       });
+
 
                       if (!context.mounted) return;
 
@@ -527,15 +857,21 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
 
     final dynamic price = data['price'] ?? 0;
 
-    final dynamic quantity =
-        data['quantity'] ?? 0;
+    final dynamic quantity = data['quantity'] ?? 0;
+    final num qtyNum = (quantity is num)
+        ? quantity
+        : (num.tryParse(quantity.toString()) ?? 0);
 
-    final String unit =
-        data['unit']?.toString() ?? 'Kg';
+    final String unit = data['unit']?.toString() ?? 'Kg';
 
-    final bool isAvailable =
-        data['isAvailable'] ??
-            (data['status']?.toString() != 'Unavailable');
+    final String statusStr =
+        data['status']?.toString().toLowerCase().trim() ?? '';
+    final bool rawAvailable =
+        data['isAvailable'] ?? (statusStr != 'unavailable');
+    final bool isOutOfStock = !rawAvailable ||
+        statusStr == 'out of stock' ||
+        statusStr == 'unavailable' ||
+        qtyNum <= 0;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
@@ -543,42 +879,27 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
       ),
-
       child: Padding(
         padding: const EdgeInsets.all(15),
-
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // ----------------------------------------------------
             // PRODUCT HEADER
             // ----------------------------------------------------
-
             Row(
-              crossAxisAlignment:
-                  CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  width: 85,
-                  height: 85,
-                  decoration: BoxDecoration(
-                    color: const Color(0xffE3F2F7),
-                    borderRadius:
-                        BorderRadius.circular(14),
-                  ),
-                  child: const Icon(
-                    Icons.set_meal,
-                    size: 48,
-                    color: Color(0xff0A4D68),
-                  ),
+                CategoryHelper.buildProductIcon(
+                  category: data['category']?.toString() ?? 'Fish',
+                  fishName: fishName,
+                  size: 85,
+                  borderRadius: 14,
                 ),
-
                 const SizedBox(width: 15),
-
                 Expanded(
                   child: Column(
-                    crossAxisAlignment:
-                        CrossAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         fishName,
@@ -588,9 +909,7 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
                           color: Color(0xff0A4D68),
                         ),
                       ),
-
                       const SizedBox(height: 5),
-
                       Text(
                         fishType,
                         style: const TextStyle(
@@ -598,9 +917,7 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
                           fontSize: 14,
                         ),
                       ),
-
                       const SizedBox(height: 8),
-
                       Text(
                         '₹$price / $unit',
                         style: const TextStyle(
@@ -608,17 +925,76 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-
-                      const SizedBox(height: 5),
-
-                      Text(
-                        'Stock: $quantity $unit',
-                        style: TextStyle(
-                          color: isAvailable
-                              ? Colors.green
-                              : Colors.red,
-                          fontWeight:
-                              FontWeight.w600,
+                      const SizedBox(height: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: isOutOfStock
+                              ? Colors.red.withValues(alpha: 0.1)
+                              : Colors.green.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: isOutOfStock
+                                ? Colors.red.withValues(alpha: 0.3)
+                                : Colors.green.withValues(alpha: 0.3),
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  isOutOfStock
+                                      ? Icons.warning_amber_rounded
+                                      : Icons.check_circle_outline,
+                                  size: 14,
+                                  color: isOutOfStock
+                                      ? Colors.red
+                                      : Colors.green.shade800,
+                                ),
+                                const SizedBox(width: 5),
+                                Text(
+                                  isOutOfStock ? 'OUT OF STOCK' : 'IN STOCK',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: isOutOfStock
+                                        ? Colors.red
+                                        : Colors.green.shade800,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              isOutOfStock
+                                  ? '0 kg available'
+                                  : StockHelper.formatStockDetailed(qtyNum),
+                              style: TextStyle(
+                                color: isOutOfStock
+                                    ? Colors.red
+                                    : Colors.green.shade900,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                              ),
+                            ),
+                            if (!isOutOfStock)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 2),
+                                child: Text(
+                                  '📦 ${qtyNum ~/ 50} Boxes • ${(qtyNum / 1000).toStringAsFixed(qtyNum % 1000 == 0 ? 0 : 2)} Tons',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.grey.shade700,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
                       ),
                     ],
@@ -632,7 +1008,6 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
             // ----------------------------------------------------
             // QUALITY + STATUS
             // ----------------------------------------------------
-
             Row(
               children: [
                 _infoChip(
@@ -640,19 +1015,11 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
                   quality,
                   Colors.orange,
                 ),
-
                 const SizedBox(width: 8),
-
                 _infoChip(
-                  isAvailable
-                      ? Icons.check_circle
-                      : Icons.cancel,
-                  isAvailable
-                      ? 'Available'
-                      : 'Unavailable',
-                  isAvailable
-                      ? Colors.green
-                      : Colors.red,
+                  !isOutOfStock ? Icons.check_circle : Icons.cancel,
+                  !isOutOfStock ? 'Available' : 'Out of Stock',
+                  !isOutOfStock ? Colors.green : Colors.red,
                 ),
               ],
             ),
@@ -662,7 +1029,6 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
             // ----------------------------------------------------
             // LOCATION
             // ----------------------------------------------------
-
             Row(
               children: [
                 const Icon(
@@ -670,9 +1036,7 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
                   size: 18,
                   color: Color(0xff0A4D68),
                 ),
-
                 const SizedBox(width: 5),
-
                 Expanded(
                   child: Text(
                     location,
@@ -687,10 +1051,8 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
             // ----------------------------------------------------
             // DESCRIPTION
             // ----------------------------------------------------
-
             if (description.isNotEmpty) ...[
               const SizedBox(height: 10),
-
               Text(
                 description,
                 maxLines: 2,
@@ -702,16 +1064,16 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
             ],
 
             const SizedBox(height: 12),
-
             const Divider(),
 
             // ----------------------------------------------------
             // ACTIONS
             // ----------------------------------------------------
-
-            Row(
-              mainAxisAlignment:
-                  MainAxisAlignment.spaceBetween,
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 OutlinedButton.icon(
                   onPressed: () {
@@ -722,28 +1084,79 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
                   },
                   icon: const Icon(
                     Icons.edit,
-                    size: 18,
+                    size: 16,
                   ),
                   label: const Text('Edit'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 6),
+                  ),
                 ),
+
+                // Dedicated OUT OF STOCK / RESTOCK Button
+                if (!isOutOfStock)
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      confirmSetOutOfStock(
+                        productId,
+                        fishName,
+                      );
+                    },
+                    icon: const Icon(
+                      Icons.block,
+                      size: 16,
+                    ),
+                    label: const Text('Out of Stock'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.deepOrange,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
+                      elevation: 1,
+                    ),
+                  )
+                else
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      showRestockDialog(
+                        productId,
+                        fishName,
+                        qtyNum.toInt(),
+                      );
+                    },
+                    icon: const Icon(
+                      Icons.add_shopping_cart,
+                      size: 16,
+                    ),
+                    label: const Text('Restock'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xff0A4D68),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
+                      elevation: 1,
+                    ),
+                  ),
 
                 OutlinedButton.icon(
                   onPressed: () {
                     toggleAvailability(
                       productId,
-                      isAvailable,
+                      !isOutOfStock,
                     );
                   },
                   icon: Icon(
-                    isAvailable
+                    !isOutOfStock
                         ? Icons.visibility_off
                         : Icons.visibility,
-                    size: 18,
+                    size: 16,
                   ),
                   label: Text(
-                    isAvailable
-                        ? 'Hide'
-                        : 'Show',
+                    !isOutOfStock ? 'Hide' : 'Show',
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 6),
                   ),
                 ),
 
@@ -755,10 +1168,11 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
                     );
                   },
                   icon: const Icon(
-                    Icons.delete,
+                    Icons.delete_outline,
                     color: Colors.red,
+                    size: 20,
                   ),
-                  tooltip: 'Delete',
+                  tooltip: 'Delete Product',
                 ),
               ],
             ),
@@ -766,6 +1180,7 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
         ),
       ),
     );
+
   }
 
   // ============================================================

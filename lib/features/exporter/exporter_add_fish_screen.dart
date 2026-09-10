@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../../utils/category_helper.dart';
 
 class AddFishScreen extends StatefulWidget {
   const AddFishScreen({super.key});
@@ -78,19 +79,71 @@ class _AddFishScreenState extends State<AddFishScreen> {
     });
 
     try {
-      await FirebaseFirestore.instance.collection('products').add({
-        'exporterId': FirebaseAuth.instance.currentUser!.uid,
+      final user = FirebaseAuth.instance.currentUser!;
+      String exporterName = 'Exporter';
+      String godownAddress = 'Kochi Fishing Harbour Cold Storage Hub, Kerala - 682005';
+      try {
+        final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+        if (userDoc.exists && userDoc.data() != null) {
+          final udata = userDoc.data()!;
+          if (udata['name'] != null && udata['name'].toString().isNotEmpty) {
+            exporterName = udata['name'].toString();
+          }
+          if (udata['godownAddress'] != null && udata['godownAddress'].toString().isNotEmpty) {
+            godownAddress = udata['godownAddress'].toString();
+          } else if (udata['location'] != null && udata['location'].toString().isNotEmpty) {
+            godownAddress = '${udata['location']} Harbour Godown';
+          }
+        }
+      } catch (_) {}
+
+      final resolvedCategory = CategoryHelper.determineCategory(
+        fishType: fishType,
+        fishName: fishNameController.text.trim(),
+        description: descriptionController.text.trim(),
+      );
+
+      final docRef = FirebaseFirestore.instance.collection('products').doc();
+      final double qty = double.tryParse(quantityController.text.trim()) ?? 0;
+      final double price = double.tryParse(priceController.text.trim()) ?? 0;
+
+      int totalStockKg = qty.toInt();
+      double effectivePricePerKg = price;
+
+      if (unit == 'Box') {
+        // 1 box = 50 kg
+        totalStockKg = (qty * 50).round();
+        effectivePricePerKg = price / 50.0;
+      } else if (unit == 'Ton') {
+        // 1 ton = 20 boxes = 1000 kg
+        totalStockKg = (qty * 1000).round();
+        effectivePricePerKg = price / 1000.0;
+      }
+
+      await docRef.set({
+        'id': docRef.id,
+        'exporterId': user.uid,
+        'exporterName': exporterName,
         'fishName': fishNameController.text.trim(),
         'fishType': fishType,
+        'category': resolvedCategory,
         'description': descriptionController.text.trim(),
-        'price': double.tryParse(priceController.text.trim()) ?? 0,
-        'quantity': double.tryParse(quantityController.text.trim()) ?? 0,
-        'unit': unit,
+        'price': effectivePricePerKg,
+        'originalPrice': price,
+        'quantity': totalStockKg,
+        'unit': 'Kg',
+        'selectedUnit': unit,
         'quality': quality,
         'location': locationController.text.trim(),
-        'status': 'Available',
+        'godownAddress': godownAddress,
+        'imageUrl': '',
+        'status': totalStockKg > 0 ? 'Available' : 'Out of Stock',
+        'isAvailable': totalStockKg > 0,
+        'rating': 0.0,
         'createdAt': Timestamp.now(),
       });
+
+
 
       if (!mounted) return;
 
@@ -212,7 +265,105 @@ class _AddFishScreenState extends State<AddFishScreen> {
                   ),
                 ),
 
-                const SizedBox(height: 25),
+                const SizedBox(height: 20),
+
+                // Category Photo Preview Card
+                Builder(
+                  builder: (context) {
+                    final currentCategory = CategoryHelper.determineCategory(
+                      fishType: fishType,
+                      fishName: fishNameController.text.trim(),
+                    );
+                    return Container(
+                      width: double.infinity,
+                      height: 130,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.blue.shade100),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.06),
+                            blurRadius: 8,
+                            offset: const Offset(0, 3),
+                          ),
+                        ],
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            Image.asset(
+                              CategoryHelper.getCategoryAssetImage(currentCategory),
+                              fit: BoxFit.cover,
+                            ),
+                            Container(
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                  colors: [
+                                    Colors.transparent,
+                                    Colors.black.withValues(alpha: 0.72),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            Positioned(
+                              bottom: 12,
+                              left: 14,
+                              right: 14,
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        'Category Photo: $currentCategory',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 15,
+                                        ),
+                                      ),
+                                      Text(
+                                        CategoryHelper.getCategorySubtitle(currentCategory),
+                                        style: const TextStyle(
+                                          color: Colors.white70,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xff0A4D68).withValues(alpha: 0.85),
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: Colors.white30),
+                                    ),
+                                    child: const Text(
+                                      'Auto Matched',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+
+                const SizedBox(height: 20),
 
                 const Text(
                   'Fish Information',
@@ -396,7 +547,41 @@ class _AddFishScreenState extends State<AddFishScreen> {
                   ],
                 ),
 
+                const SizedBox(height: 10),
+
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.blue.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.info_outline,
+                          size: 16, color: Color(0xff0A4D68)),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          unit == 'Box'
+                              ? '📦 1 Box = 50 kg (Price will be calculated per kg: ₹${priceController.text.trim().isNotEmpty && double.tryParse(priceController.text.trim()) != null ? (double.parse(priceController.text.trim()) / 50).toStringAsFixed(1) : "..."} / kg)'
+                              : unit == 'Ton'
+                                  ? '⚖️ 1 Ton = 20 Boxes = 1,000 kg (Price will be calculated per kg)'
+                                  : '💡 Standard Units: 1 Box = 50 kg • 1 Ton = 20 Boxes (1,000 kg)',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xff0A4D68),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
                 const SizedBox(height: 25),
+
 
                 const Text(
                   'Additional Information',
