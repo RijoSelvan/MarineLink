@@ -1,6 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import '../../services/notification_service.dart';
+import '../../utils/category_helper.dart';
+import '../../widgets/report_complaint_dialog.dart';
 
 class Orders extends StatefulWidget {
   const Orders({super.key});
@@ -12,6 +15,7 @@ class Orders extends StatefulWidget {
 class _OrdersState extends State<Orders> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  String _filter = 'All'; // 'All', 'Pending', 'Processing', 'In Shipment', 'Completed'
 
   // ============================================================
   // GET EXPORTER ORDERS
@@ -39,10 +43,93 @@ class _OrdersState extends State<Orders> {
     String status,
   ) async {
     try {
-      await _firestore.collection('orders').doc(orderId).update({
+      final Map<String, dynamic> updates = {
         'status': status,
+        'orderStatus': status,
         'updatedAt': Timestamp.now(),
-      });
+      };
+
+      // Automatically advance shipment state as order progresses
+      if (status == 'Processing') {
+        updates['shipmentStatus'] = 'Preparing';
+      } else if (status == 'Shipped') {
+        updates['shipmentStatus'] = 'Shipped';
+      } else if (status == 'In Transit') {
+        updates['shipmentStatus'] = 'In Transit';
+      } else if (status == 'Delivered' || status == 'Completed') {
+        updates['shipmentStatus'] = 'Delivered';
+      }
+
+      await _firestore.collection('orders').doc(orderId).update(updates);
+
+      // Dispatch notification to buyer
+      try {
+        final orderDoc =
+            await _firestore.collection('orders').doc(orderId).get();
+        final orderData = orderDoc.data();
+        if (orderData != null) {
+          final buyerId = orderData['buyerId']?.toString() ?? '';
+          final fishName =
+              orderData['fishName']?.toString() ?? 'seafood product';
+
+          if (buyerId.isNotEmpty) {
+            String notifTitle = 'Order Status Updated';
+            String notifMsg =
+                'Your order for $fishName status is now $status.';
+            String notifType = 'system';
+
+            switch (status) {
+              case 'Accepted':
+                notifTitle = 'Order Accepted! ⚓';
+                notifMsg =
+                    'The exporter has accepted your order for $fishName. Preparation will begin shortly.';
+                notifType = 'order_accepted';
+                break;
+              case 'Processing':
+                notifTitle = 'Order in Processing 📦';
+                notifMsg =
+                    'Your order for $fishName is now being processed and packed for export.';
+                notifType = 'system';
+                break;
+              case 'Shipped':
+                notifTitle = 'Consignment Shipped! 🚢';
+                notifMsg =
+                    'Your seafood consignment of $fishName has departed and is on its way.';
+                notifType = 'order_shipped';
+                break;
+              case 'In Transit':
+                notifTitle = 'Cargo In Transit 🌊';
+                notifMsg =
+                    'Your cargo of $fishName is in transit to your delivery destination.';
+                notifType = 'order_shipped';
+                break;
+              case 'Delivered':
+              case 'Completed':
+                notifTitle = 'Order Delivered! 🎉';
+                notifMsg =
+                    'Your order for $fishName has been delivered successfully. Thank you!';
+                notifType = 'order_delivered';
+                break;
+              case 'Rejected':
+                notifTitle = 'Order Rejected ❌';
+                notifMsg =
+                    'Your order for $fishName could not be accepted by the exporter.';
+                notifType = 'order_rejected';
+                break;
+            }
+
+            await NotificationService().notifyUser(
+              userId: buyerId,
+              title: notifTitle,
+              message: notifMsg,
+              type: notifType,
+              orderId: orderId,
+            );
+          }
+        }
+      } catch (notifErr) {
+        debugPrint('Error sending status notification: $notifErr');
+      }
 
       if (!mounted) return;
 
@@ -77,10 +164,82 @@ class _OrdersState extends State<Orders> {
     String shipmentStatus,
   ) async {
     try {
-      await _firestore.collection('orders').doc(orderId).update({
+      final Map<String, dynamic> updates = {
         'shipmentStatus': shipmentStatus,
         'updatedAt': Timestamp.now(),
-      });
+      };
+
+      // Automatically sync overall status
+      if (shipmentStatus == 'Preparing') {
+        updates['status'] = 'Processing';
+        updates['orderStatus'] = 'Processing';
+      } else if (shipmentStatus == 'Shipped') {
+        updates['status'] = 'Shipped';
+        updates['orderStatus'] = 'Shipped';
+      } else if (shipmentStatus == 'In Transit') {
+        updates['status'] = 'In Transit';
+        updates['orderStatus'] = 'In Transit';
+      } else if (shipmentStatus == 'Delivered') {
+        updates['status'] = 'Delivered';
+        updates['orderStatus'] = 'Delivered';
+      }
+
+      await _firestore.collection('orders').doc(orderId).update(updates);
+
+      // Dispatch notification to buyer
+      try {
+        final orderDoc =
+            await _firestore.collection('orders').doc(orderId).get();
+        final orderData = orderDoc.data();
+        if (orderData != null) {
+          final buyerId = orderData['buyerId']?.toString() ?? '';
+          final fishName =
+              orderData['fishName']?.toString() ?? 'seafood consignment';
+
+          if (buyerId.isNotEmpty) {
+            String notifTitle = 'Shipment Update 🚢';
+            String notifMsg =
+                'Shipment status for $fishName is now: $shipmentStatus.';
+            String notifType = 'order_shipped';
+
+            switch (shipmentStatus) {
+              case 'Preparing':
+                notifTitle = 'Shipment Being Prepared 📦';
+                notifMsg =
+                    'Your consignment of $fishName is being prepared for dispatch.';
+                break;
+              case 'Shipped':
+                notifTitle = 'Consignment Shipped! 🚢';
+                notifMsg =
+                    'Great news! Your cargo of $fishName has departed and is on its way.';
+                notifType = 'order_shipped';
+                break;
+              case 'In Transit':
+                notifTitle = 'Cargo In Transit 🌊';
+                notifMsg =
+                    'Your cargo of $fishName is in transit towards your delivery destination.';
+                notifType = 'order_shipped';
+                break;
+              case 'Delivered':
+                notifTitle = 'Shipment Delivered! 📬';
+                notifMsg =
+                    'Your shipment for $fishName has arrived and has been marked as delivered.';
+                notifType = 'order_delivered';
+                break;
+            }
+
+            await NotificationService().notifyUser(
+              userId: buyerId,
+              title: notifTitle,
+              message: notifMsg,
+              type: notifType,
+              orderId: orderId,
+            );
+          }
+        }
+      } catch (notifErr) {
+        debugPrint('Error sending shipment notification: $notifErr');
+      }
 
       if (!mounted) return;
 
@@ -118,8 +277,11 @@ class _OrdersState extends State<Orders> {
       'Pending',
       'Accepted',
       'Processing',
-      'Rejected',
+      'Shipped',
+      'In Transit',
+      'Delivered',
       'Completed',
+      'Rejected',
     ];
 
     showDialog(
@@ -239,7 +401,16 @@ class _OrdersState extends State<Orders> {
         return Icons.check_circle;
 
       case 'Processing':
-        return Icons.settings;
+        return Icons.inventory_2;
+
+      case 'Shipped':
+        return Icons.local_shipping;
+
+      case 'In Transit':
+        return Icons.route;
+
+      case 'Delivered':
+        return Icons.verified;
 
       case 'Rejected':
         return Icons.cancel;
@@ -262,10 +433,19 @@ class _OrdersState extends State<Orders> {
         return Colors.orange;
 
       case 'Accepted':
-        return Colors.green;
+        return Colors.blue;
 
       case 'Processing':
-        return Colors.blue;
+        return Colors.deepPurple;
+
+      case 'Shipped':
+        return Colors.indigo;
+
+      case 'In Transit':
+        return Colors.teal;
+
+      case 'Delivered':
+        return Colors.green;
 
       case 'Rejected':
         return Colors.red;
@@ -415,19 +595,11 @@ class _OrdersState extends State<Orders> {
               crossAxisAlignment:
                   CrossAxisAlignment.start,
               children: [
-                Container(
-                  width: 60,
-                  height: 60,
-                  decoration: BoxDecoration(
-                    color: const Color(0xffE3F2F7),
-                    borderRadius:
-                        BorderRadius.circular(12),
-                  ),
-                  child: const Icon(
-                    Icons.shopping_cart,
-                    color: Color(0xff0A4D68),
-                    size: 32,
-                  ),
+                CategoryHelper.buildProductIcon(
+                  category: data['category']?.toString() ?? 'Fish',
+                  fishName: fishName,
+                  size: 52,
+                  borderRadius: 14,
                 ),
 
                 const SizedBox(width: 12),
@@ -615,12 +787,11 @@ class _OrdersState extends State<Orders> {
             ),
 
             // ==================================================
-            // QUICK ACCEPT / REJECT
+            // SMART ACTION WORKFLOW BUTTONS
             // ==================================================
 
             if (status == 'Pending') ...[
               const SizedBox(height: 10),
-
               Row(
                 children: [
                   Expanded(
@@ -637,18 +808,13 @@ class _OrdersState extends State<Orders> {
                       label: const Text(
                         'Accept Order',
                       ),
-                      style:
-                          ElevatedButton.styleFrom(
-                        backgroundColor:
-                            Colors.green,
-                        foregroundColor:
-                            Colors.white,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                        foregroundColor: Colors.white,
                       ),
                     ),
                   ),
-
                   const SizedBox(width: 10),
-
                   Expanded(
                     child: ElevatedButton.icon(
                       onPressed: () {
@@ -663,18 +829,182 @@ class _OrdersState extends State<Orders> {
                       label: const Text(
                         'Reject',
                       ),
-                      style:
-                          ElevatedButton.styleFrom(
-                        backgroundColor:
-                            Colors.red,
-                        foregroundColor:
-                            Colors.white,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red,
+                        foregroundColor: Colors.white,
                       ),
                     ),
                   ),
                 ],
               ),
+            ] else if (status == 'Accepted') ...[
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    updateOrderStatus(
+                      orderId,
+                      'Processing',
+                    );
+                  },
+                  icon: const Icon(Icons.inventory_2_outlined),
+                  label: const Text(
+                    'Start Processing & Packing 📦',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xff088395),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                ),
+              ),
+            ] else if (status == 'Processing' || shipmentStatus == 'Preparing') ...[
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    updateShipmentStatus(
+                      orderId,
+                      'Shipped',
+                    );
+                  },
+                  icon: const Icon(Icons.local_shipping_rounded),
+                  label: const Text(
+                    'Dispatch & Enter Shipment State 🚢',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xff0A4D68),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                ),
+              ),
+            ] else if (status == 'Shipped' || shipmentStatus == 'Shipped') ...[
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        updateShipmentStatus(
+                          orderId,
+                          'In Transit',
+                        );
+                      },
+                      icon: const Icon(Icons.route_rounded),
+                      label: const Text('In Transit 🌊'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.deepPurple,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        updateShipmentStatus(
+                          orderId,
+                          'Delivered',
+                        );
+                      },
+                      icon: const Icon(Icons.done_all_rounded),
+                      label: const Text('Delivered 📬'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ] else if (status == 'In Transit' || shipmentStatus == 'In Transit') ...[
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    updateShipmentStatus(
+                      orderId,
+                      'Delivered',
+                    );
+                  },
+                  icon: const Icon(Icons.verified_rounded),
+                  label: const Text(
+                    'Mark as Delivered & Completed 📬',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                ),
+              ),
+            ] else if (status == 'Delivered' || status == 'Completed' || shipmentStatus == 'Delivered') ...[
+              const SizedBox(height: 10),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+                decoration: BoxDecoration(
+                  color: Colors.green.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.green.shade300),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.check_circle_rounded, color: Colors.green, size: 16),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          'Order Delivered & Completed Successfully 🎉',
+                          style: TextStyle(
+                            color: Colors.green.shade800,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12.5,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ],
+
+            const SizedBox(height: 10),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.red.shade700,
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                ),
+                icon: const Icon(Icons.report_problem_outlined, size: 16),
+                label: const Text(
+                  'Report Issue / Cheating to Admin',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                ),
+                onPressed: () {
+                  ReportComplaintDialog.show(
+                    context,
+                    orderId: orderId,
+                    fishName: fishName,
+                    accusedId: data['buyerId']?.toString(),
+                    accusedName: buyerName,
+                    accusedRole: 'Buyer',
+                    userRole: 'Exporter',
+                  );
+                },
+              ),
+            ),
           ],
         ),
       ),
@@ -951,27 +1281,110 @@ class _OrdersState extends State<Orders> {
                 // ORDERS
                 // ------------------------------------------------
 
-                final orders =
-                    snapshot.data?.docs ?? [];
+                final orders = snapshot.data?.docs ?? [];
 
                 if (orders.isEmpty) {
                   return _buildEmptyState();
                 }
 
-                return ListView.builder(
-                  padding:
-                      const EdgeInsets.all(16),
-                  itemCount: orders.length,
-                  itemBuilder:
-                      (context, index) {
-                    final document =
-                        orders[index];
+                final filteredOrders = orders.where((doc) {
+                  final data = doc.data();
+                  final st = (data['status'] ?? '').toString().toLowerCase();
+                  final ship =
+                      (data['shipmentStatus'] ?? '').toString().toLowerCase();
 
-                    return _buildOrderCard(
-                      document.id,
-                      document.data(),
-                    );
-                  },
+                  if (_filter == 'Pending') {
+                    return st == 'pending';
+                  } else if (_filter == 'Processing') {
+                    return st == 'processing' ||
+                        st == 'accepted' ||
+                        ship == 'preparing';
+                  } else if (_filter == 'In Shipment') {
+                    return st == 'shipped' ||
+                        st == 'in transit' ||
+                        ship == 'shipped' ||
+                        ship == 'in transit';
+                  } else if (_filter == 'Completed') {
+                    return st == 'completed' ||
+                        st == 'delivered' ||
+                        ship == 'delivered';
+                  }
+                  return true;
+                }).toList();
+
+                return Column(
+                  children: [
+                    // Horizontal Filter Bar
+                    Container(
+                      color: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 10,
+                      ),
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            'All',
+                            'Pending',
+                            'Processing',
+                            'In Shipment',
+                            'Completed',
+                          ].map((f) {
+                            final isSel = _filter == f;
+                            return Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: ChoiceChip(
+                                label: Text(f),
+                                selected: isSel,
+                                selectedColor: const Color(0xff0A4D68),
+                                labelStyle: TextStyle(
+                                  color: isSel ? Colors.white : Colors.black87,
+                                  fontWeight: isSel
+                                      ? FontWeight.bold
+                                      : FontWeight.normal,
+                                  fontSize: 12,
+                                ),
+                                onSelected: (selected) {
+                                  if (selected) {
+                                    setState(() => _filter = f);
+                                  }
+                                },
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                    ),
+                    const Divider(height: 1),
+
+                    Expanded(
+                      child: filteredOrders.isEmpty
+                          ? Center(
+                              child: Padding(
+                                padding: const EdgeInsets.all(30),
+                                child: Text(
+                                  'No orders found under "$_filter"',
+                                  style: const TextStyle(
+                                    color: Colors.grey,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                              ),
+                            )
+                          : ListView.builder(
+                              padding: const EdgeInsets.all(16),
+                              itemCount: filteredOrders.length,
+                              itemBuilder: (context, index) {
+                                final document = filteredOrders[index];
+                                return _buildOrderCard(
+                                  document.id,
+                                  document.data(),
+                                );
+                              },
+                            ),
+                    ),
+                  ],
                 );
               },
             ),
