@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../models/product_model.dart';
 import '../../services/product_service.dart';
+import '../../utils/category_helper.dart';
+import '../../utils/stock_helper.dart';
+import 'buyer_cart_screen.dart';
+
 
 class BuyerProductDetailsScreen extends StatefulWidget {
   final Product product;
@@ -21,6 +26,7 @@ class _BuyerProductDetailsScreenState
   final ProductService productService = ProductService();
 
   int quantity = 1;
+  late final TextEditingController _quantityController;
 
   bool isAddingToCart = false;
   bool isWishlistLoading = false;
@@ -29,7 +35,27 @@ class _BuyerProductDetailsScreenState
   @override
   void initState() {
     super.initState();
+    _quantityController = TextEditingController(text: '$quantity');
     _checkWishlist();
+  }
+
+  @override
+  void dispose() {
+    _quantityController.dispose();
+    super.dispose();
+  }
+
+  void _updateQuantity(int newQty, int maxStock) {
+    int clamped = newQty;
+    if (clamped < 1) clamped = 1;
+    if (clamped > maxStock && maxStock > 0) clamped = maxStock;
+    setState(() {
+      quantity = clamped;
+    });
+    _quantityController.text = '$clamped';
+    _quantityController.selection = TextSelection.fromPosition(
+      TextPosition(offset: _quantityController.text.length),
+    );
   }
 
   // ================================================================
@@ -150,14 +176,27 @@ class _BuyerProductDetailsScreenState
                       : 'Add to Wishlist',
                   icon: Icon(
                     isInWishlist
-                        ? Icons.favorite
-                        : Icons.favorite_border,
+                        ? Icons.favorite_rounded
+                        : Icons.favorite_border_rounded,
                     color: isInWishlist
                         ? Colors.red
                         : Colors.white,
                     size: 28,
                   ),
                 ),
+          IconButton(
+            icon: const Icon(Icons.shopping_cart_rounded, size: 26),
+            tooltip: 'View Cart',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const BuyerCartScreen(),
+                ),
+              );
+            },
+          ),
+          const SizedBox(width: 4),
         ],
       ),
 
@@ -241,7 +280,7 @@ class _BuyerProductDetailsScreenState
                   Row(
                     children: [
                       const Icon(
-                        Icons.star,
+                        Icons.star_rounded,
                         color: Colors.orange,
                         size: 22,
                       ),
@@ -270,25 +309,103 @@ class _BuyerProductDetailsScreenState
                   // ==================================================
 
                   Container(
+                    width: double.infinity,
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: Colors.green.withValues(alpha: 0.08),
+                      color: product.isOutOfStock
+                          ? Colors.red.withValues(alpha: 0.08)
+                          : Colors.green.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: product.isOutOfStock
+                            ? Colors.red.withValues(alpha: 0.25)
+                            : Colors.green.withValues(alpha: 0.25),
+                      ),
                     ),
-                    child: Row(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Icon(
-                          Icons.inventory_2,
-                          color: Colors.green,
+                        Row(
+                          children: [
+                            Icon(
+                              product.isOutOfStock
+                                  ? Icons.warning_amber_rounded
+                                  : Icons.inventory_2_rounded,
+                              color: product.isOutOfStock
+                                  ? Colors.red
+                                  : Colors.green.shade800,
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                product.isOutOfStock
+                                    ? 'Out of Stock'
+                                    : 'Stock Available: ${StockHelper.formatStockDetailed(product.quantity)}',
+                                style: TextStyle(
+                                  color: product.isOutOfStock
+                                      ? Colors.red
+                                      : Colors.green.shade900,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 15,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 10),
-                        Text(
-                          '${product.quantity} kg available',
-                          style: const TextStyle(
-                            color: Colors.green,
-                            fontWeight: FontWeight.bold,
+                        if (!product.isOutOfStock) ...[
+                          const SizedBox(height: 10),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 6,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.blue.shade50,
+                                  borderRadius: BorderRadius.circular(6),
+                                  border:
+                                      Border.all(color: Colors.blue.shade200),
+                                ),
+                                child: Text(
+                                  '📦 ${(product.quantity ~/ 50)} Boxes',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.blue.shade900,
+                                  ),
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.teal.shade50,
+                                  borderRadius: BorderRadius.circular(6),
+                                  border:
+                                      Border.all(color: Colors.teal.shade200),
+                                ),
+                                child: Text(
+                                  '⚖️ ${(product.quantity / 1000).toStringAsFixed(product.quantity % 1000 == 0 ? 0 : 2)} Tons',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.teal.shade900,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            'ℹ️ 1 Box = 50 kg • 1 Ton = 20 Boxes (1,000 kg)',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.grey,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -329,7 +446,7 @@ class _BuyerProductDetailsScreenState
                           radius: 25,
                           backgroundColor: Color(0xffE8F4F8),
                           child: Icon(
-                            Icons.person,
+                            Icons.store_rounded,
                             color: Color(0xff0A4D68),
                             size: 28,
                           ),
@@ -412,41 +529,150 @@ class _BuyerProductDetailsScreenState
                   Row(
                     children: [
                       _quantityButton(
-                        icon: Icons.remove,
-                        onPressed: quantity > 1
+                        icon: Icons.remove_rounded,
+                        onPressed: quantity > 1 && !product.isOutOfStock
                             ? () {
-                                setState(() {
-                                  quantity--;
-                                });
+                                _updateQuantity(quantity - 1, product.quantity);
                               }
                             : null,
                       ),
+                      const SizedBox(width: 8),
 
                       Container(
-                        width: 80,
+                        width: 95,
+                        height: 44,
                         alignment: Alignment.center,
-                        child: Text(
-                          '$quantity kg',
+                        child: TextField(
+                          controller: _quantityController,
+                          keyboardType: TextInputType.number,
+                          textAlign: TextAlign.center,
+                          enabled: !product.isOutOfStock,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                          ],
                           style: const TextStyle(
-                            fontSize: 18,
+                            fontSize: 16,
                             fontWeight: FontWeight.bold,
+                            color: Color(0xff0A4D68),
                           ),
+                          decoration: InputDecoration(
+                            suffixText: 'kg',
+                            suffixStyle: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.grey.shade600,
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                              vertical: 10,
+                              horizontal: 8,
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: BorderSide(color: Colors.grey.shade300),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: BorderSide(color: Colors.grey.shade300),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: const BorderSide(
+                                color: Color(0xff0A4D68),
+                                width: 2,
+                              ),
+                            ),
+                            filled: true,
+                            fillColor: Colors.grey.shade50,
+                          ),
+                          onChanged: (val) {
+                            final parsed = int.tryParse(val);
+                            if (parsed != null && parsed > 0) {
+                              final clamped = parsed > product.quantity
+                                  ? product.quantity
+                                  : parsed;
+                              setState(() {
+                                quantity = clamped;
+                              });
+                              if (clamped != parsed) {
+                                _quantityController.text = '$clamped';
+                                _quantityController.selection = TextSelection.fromPosition(
+                                  TextPosition(offset: _quantityController.text.length),
+                                );
+                              }
+                            }
+                          },
+                          onEditingComplete: () {
+                            final parsed = int.tryParse(_quantityController.text);
+                            if (parsed == null || parsed < 1) {
+                              _updateQuantity(1, product.quantity);
+                            } else if (parsed > product.quantity) {
+                              _updateQuantity(product.quantity, product.quantity);
+                            }
+                            FocusScope.of(context).unfocus();
+                          },
                         ),
                       ),
+                      const SizedBox(width: 8),
 
                       _quantityButton(
-                        icon: Icons.add,
+                        icon: Icons.add_rounded,
                         onPressed:
-                            quantity < product.quantity
+                            quantity < product.quantity && !product.isOutOfStock
                                 ? () {
-                                    setState(() {
-                                      quantity++;
-                                    });
+                                    _updateQuantity(quantity + 1, product.quantity);
                                   }
                                 : null,
                       ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Text(
+                          '≈ ${quantity ~/ 50} Box${(quantity ~/ 50) == 1 ? '' : 'es'} (${(quantity / 1000).toStringAsFixed(2)} Ton)',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey.shade700,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
                     ],
                   ),
+
+                  if (!product.isOutOfStock) ...[
+                    const SizedBox(height: 12),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          ActionChip(
+                            label: const Text('+1 Box (50 kg)'),
+                            avatar:
+                                const Icon(Icons.add_box_outlined, size: 16),
+                            onPressed: () {
+                              _updateQuantity(quantity + 50, product.quantity);
+                            },
+                          ),
+                          const SizedBox(width: 8),
+                          ActionChip(
+                            label: const Text('+5 Boxes (250 kg)'),
+                            avatar: const Icon(Icons.inventory_2_outlined,
+                                size: 16),
+                            onPressed: () {
+                              _updateQuantity(quantity + 250, product.quantity);
+                            },
+                          ),
+                          const SizedBox(width: 8),
+                          ActionChip(
+                            label: const Text('+1 Ton (20 Boxes)'),
+                            avatar: const Icon(Icons.scale, size: 16),
+                            onPressed: () {
+                              _updateQuantity(quantity + 1000, product.quantity);
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+
 
                   const SizedBox(height: 25),
 
@@ -507,7 +733,7 @@ class _BuyerProductDetailsScreenState
                         ),
                       ),
 
-                      onPressed: product.quantity <= 0 ||
+                      onPressed: product.isOutOfStock ||
                               isAddingToCart
                           ? null
                           : _addToCart,
@@ -522,17 +748,21 @@ class _BuyerProductDetailsScreenState
                                 strokeWidth: 3,
                               ),
                             )
-                          : const Row(
+                          : Row(
                               mainAxisAlignment:
                                   MainAxisAlignment.center,
                               children: [
                                 Icon(
-                                  Icons.shopping_cart,
+                                  product.isOutOfStock
+                                      ? Icons.remove_shopping_cart_outlined
+                                      : Icons.shopping_bag_rounded,
                                 ),
-                                SizedBox(width: 10),
+                                const SizedBox(width: 10),
                                 Text(
-                                  'ADD TO CART',
-                                  style: TextStyle(
+                                  product.isOutOfStock
+                                      ? 'OUT OF STOCK'
+                                      : 'ADD TO CART',
+                                  style: const TextStyle(
                                     fontSize: 17,
                                     fontWeight:
                                         FontWeight.bold,
@@ -543,13 +773,49 @@ class _BuyerProductDetailsScreenState
                     ),
                   ),
 
+                  const SizedBox(height: 12),
+
+                  // ==================================================
+                  // VIEW CART BUTTON
+                  // ==================================================
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: Color(0xff0A4D68), width: 1.5),
+                        foregroundColor: const Color(0xff0A4D68),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const BuyerCartScreen(),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.shopping_cart_rounded),
+                      label: const Text(
+                        'VIEW CART',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
+                  ),
+
                   const SizedBox(height: 15),
 
                   // ==================================================
                   // AVAILABILITY MESSAGE
                   // ==================================================
 
-                  if (product.quantity <= 0)
+                  if (product.isOutOfStock)
                     const Center(
                       child: Text(
                         'This product is currently out of stock.',
@@ -573,7 +839,7 @@ class _BuyerProductDetailsScreenState
   // ================================================================
 
   Future<void> _addToCart() async {
-    if (widget.product.quantity <= 0) {
+    if (widget.product.isOutOfStock) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
@@ -582,6 +848,7 @@ class _BuyerProductDetailsScreenState
           backgroundColor: Colors.red,
         ),
       );
+
 
       return;
     }
@@ -611,10 +878,14 @@ class _BuyerProductDetailsScreenState
           backgroundColor: Colors.green,
           action: SnackBarAction(
             label: 'VIEW CART',
-            textColor: Colors.white,
+            textColor: Colors.amberAccent,
             onPressed: () {
-              // Cart navigation can be connected
-              // through the Buyer Dashboard.
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const BuyerCartScreen(),
+                ),
+              );
             },
           ),
         ),
@@ -634,15 +905,24 @@ class _BuyerProductDetailsScreenState
   // ================================================================
 
   Widget _buildProductImage(String imageUrl) {
+    final String fallbackAsset = CategoryHelper.getCategoryAssetImage(widget.product.category);
+
     if (imageUrl.trim().isEmpty) {
-      return Container(
+      return Image.asset(
+        fallbackAsset,
         width: double.infinity,
         height: 270,
-        color: const Color(0xffE8F4F8),
-        child: const Icon(
-          Icons.set_meal,
-          size: 110,
-          color: Color(0xff0A4D68),
+        fit: BoxFit.cover,
+        errorBuilder: (ctx, err, stack) => Container(
+          width: double.infinity,
+          height: 270,
+          color: const Color(0xffE8F4F8),
+          child: const Center(
+            child: Text(
+              '🐟',
+              style: TextStyle(fontSize: 90),
+            ),
+          ),
         ),
       );
     }
@@ -671,32 +951,38 @@ class _BuyerProductDetailsScreenState
       },
       errorBuilder:
           (context, error, stackTrace) {
-        return Container(
+        return Image.asset(
+          fallbackAsset,
           width: double.infinity,
           height: 270,
-          color: const Color(0xffE8F4F8),
-          child: const Column(
-            mainAxisAlignment:
-                MainAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.broken_image,
-                size: 70,
-                color: Color(0xff0A4D68),
-              ),
-              SizedBox(height: 8),
-              Text(
-                'Image unavailable',
-                style: TextStyle(
-                  color: Colors.grey,
+          fit: BoxFit.cover,
+          errorBuilder: (ctx, err, stack) => Container(
+            width: double.infinity,
+            height: 270,
+            color: const Color(0xffE8F4F8),
+            child: const Column(
+              mainAxisAlignment:
+                  MainAxisAlignment.center,
+              children: [
+                Text(
+                  '🐟',
+                  style: TextStyle(fontSize: 55),
                 ),
-              ),
-            ],
+                SizedBox(height: 8),
+                Text(
+                  'Image unavailable',
+                  style: TextStyle(
+                    color: Colors.grey,
+                  ),
+                ),
+              ],
+            ),
           ),
         );
       },
     );
   }
+
 
   // ================================================================
   // QUANTITY BUTTON

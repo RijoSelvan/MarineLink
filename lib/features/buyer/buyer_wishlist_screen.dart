@@ -3,7 +3,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../models/product_model.dart';
 import '../../services/product_service.dart';
+import '../../utils/category_helper.dart';
 import 'buyer_product_details_screen.dart';
+import 'buyer_cart_screen.dart';
 
 class BuyerWishlistScreen extends StatelessWidget {
   const BuyerWishlistScreen({super.key});
@@ -69,6 +71,38 @@ class BuyerWishlistScreen extends StatelessWidget {
             fontWeight: FontWeight.bold,
           ),
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.shopping_cart_rounded, size: 26),
+            tooltip: 'View Cart',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const BuyerCartScreen(),
+                ),
+              );
+            },
+          ),
+          const SizedBox(width: 6),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        backgroundColor: primaryColor,
+        foregroundColor: Colors.white,
+        icon: const Icon(Icons.shopping_cart_rounded),
+        label: const Text(
+          'View Cart',
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+        ),
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const BuyerCartScreen(),
+            ),
+          );
+        },
       ),
 
       body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
@@ -95,7 +129,7 @@ class BuyerWishlistScreen extends StatelessWidget {
                       MainAxisAlignment.center,
                   children: [
                     const Icon(
-                      Icons.error_outline,
+                      Icons.error_outline_rounded,
                       size: 70,
                       color: Colors.red,
                     ),
@@ -169,7 +203,7 @@ class BuyerWishlistScreen extends StatelessWidget {
                 shape: BoxShape.circle,
               ),
               child: const Icon(
-                Icons.favorite_border,
+                Icons.favorite_border_rounded,
                 size: 80,
                 color: Colors.red,
               ),
@@ -283,7 +317,7 @@ class BuyerWishlistScreen extends StatelessWidget {
                     Row(
                       children: [
                         const Icon(
-                          Icons.person_outline,
+                          Icons.store_rounded,
                           size: 16,
                           color: Colors.grey,
                         ),
@@ -313,7 +347,7 @@ class BuyerWishlistScreen extends StatelessWidget {
                 tooltip: "Remove from wishlist",
 
                 icon: const Icon(
-                  Icons.favorite,
+                  Icons.favorite_rounded,
                   color: Colors.red,
                   size: 30,
                 ),
@@ -337,18 +371,30 @@ class BuyerWishlistScreen extends StatelessWidget {
   // ============================================================
 
   Widget _productImage(Product product) {
+    final String fallbackAsset = CategoryHelper.getCategoryAssetImage(product.category);
+
     if (product.imageUrl.isEmpty) {
-      return Container(
-        width: 90,
-        height: 90,
-        decoration: BoxDecoration(
-          color: const Color(0xffE8F4F8),
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: const Icon(
-          Icons.set_meal,
-          size: 45,
-          color: primaryColor,
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: Image.asset(
+          fallbackAsset,
+          width: 90,
+          height: 90,
+          fit: BoxFit.cover,
+          errorBuilder: (ctx, err, stack) => Container(
+            width: 90,
+            height: 90,
+            decoration: BoxDecoration(
+              color: const Color(0xffE8F4F8),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: const Center(
+              child: Text(
+                '🐟',
+                style: TextStyle(fontSize: 38),
+              ),
+            ),
+          ),
         ),
       );
     }
@@ -360,20 +406,26 @@ class BuyerWishlistScreen extends StatelessWidget {
         width: 90,
         height: 90,
         fit: BoxFit.cover,
-
-        errorBuilder:
-            (context, error, stackTrace) {
-          return Container(
+        errorBuilder: (context, error, stackTrace) {
+          return Image.asset(
+            fallbackAsset,
             width: 90,
             height: 90,
-            color: const Color(0xffE8F4F8),
-            child: const Icon(
-              Icons.image_not_supported,
-              color: primaryColor,
-              size: 35,
+            fit: BoxFit.cover,
+            errorBuilder: (ctx, err, stack) => Container(
+              width: 90,
+              height: 90,
+              color: const Color(0xffE8F4F8),
+              child: const Center(
+                child: Text(
+                  '🐟',
+                  style: TextStyle(fontSize: 30),
+                ),
+              ),
             ),
           );
         },
+
 
         loadingBuilder:
             (context, child, loadingProgress) {
