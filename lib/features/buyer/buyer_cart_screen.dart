@@ -3,10 +3,15 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../services/product_service.dart';
+import '../../utils/category_helper.dart';
 import 'buyer_checkout_screen.dart';
 
+
+import 'buyer_dashboard.dart';
+
 class BuyerCartScreen extends StatefulWidget {
-  const BuyerCartScreen({super.key});
+  final VoidCallback? onBrowse;
+  const BuyerCartScreen({super.key, this.onBrowse});
 
   @override
   State<BuyerCartScreen> createState() => _BuyerCartScreenState();
@@ -217,7 +222,7 @@ class _BuyerCartScreenState extends State<BuyerCartScreen> {
               return IconButton(
                 tooltip: 'Clear Cart',
                 icon: const Icon(
-                  Icons.delete_sweep,
+                  Icons.delete_sweep_rounded,
                 ),
                 onPressed: isRemoving
                     ? null
@@ -350,7 +355,7 @@ class _BuyerCartScreenState extends State<BuyerCartScreen> {
                 shape: BoxShape.circle,
               ),
               child: const Icon(
-                Icons.shopping_cart_outlined,
+                Icons.shopping_bag_outlined,
                 size: 80,
                 color: Color(0xff0A4D68),
               ),
@@ -390,10 +395,21 @@ class _BuyerCartScreenState extends State<BuyerCartScreen> {
                 ),
               ),
               onPressed: () {
-                Navigator.pop(context);
+                if (widget.onBrowse != null) {
+                  widget.onBrowse!();
+                } else if (Navigator.canPop(context)) {
+                  Navigator.pop(context);
+                } else {
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const BuyerDashboard(),
+                    ),
+                  );
+                }
               },
               icon: const Icon(
-                Icons.shopping_bag,
+                Icons.shopping_bag_rounded,
               ),
               label: const Text(
                 'Browse Products',
@@ -458,7 +474,7 @@ class _BuyerCartScreenState extends State<BuyerCartScreen> {
             // PRODUCT IMAGE
             // ======================================================
 
-            _productImage(imageUrl),
+            _productImage(imageUrl, category),
 
             const SizedBox(width: 15),
 
@@ -521,11 +537,13 @@ class _BuyerCartScreenState extends State<BuyerCartScreen> {
                   const SizedBox(height: 5),
 
                   Text(
-                    'Quantity: $quantity kg',
+                    'Quantity: $quantity kg (${quantity ~/ 50} boxes${quantity >= 1000 ? ' • ${(quantity / 1000).toStringAsFixed(2)} tons' : ''})',
                     style: const TextStyle(
-                      fontSize: 14,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
+
 
                   const SizedBox(height: 5),
 
@@ -548,7 +566,7 @@ class _BuyerCartScreenState extends State<BuyerCartScreen> {
             IconButton(
               tooltip: 'Remove',
               icon: const Icon(
-                Icons.delete_outline,
+                Icons.delete_outline_rounded,
                 color: Colors.red,
               ),
               onPressed: isRemoving
@@ -571,55 +589,69 @@ class _BuyerCartScreenState extends State<BuyerCartScreen> {
 
   Widget _productImage(
     String imageUrl,
+    String category,
   ) {
+    final String fallbackAsset = CategoryHelper.getCategoryAssetImage(category);
+
     if (imageUrl.isEmpty) {
-      return Container(
-        width: 85,
-        height: 85,
-        decoration: BoxDecoration(
-          color: const Color(0xffE8F4F8),
-          borderRadius:
-              BorderRadius.circular(12),
-        ),
-        child: const Icon(
-          Icons.set_meal,
-          size: 45,
-          color: Color(0xff0A4D68),
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Image.asset(
+          fallbackAsset,
+          width: 85,
+          height: 85,
+          fit: BoxFit.cover,
+          errorBuilder: (ctx, err, stack) => Container(
+            width: 85,
+            height: 85,
+            decoration: BoxDecoration(
+              color: CategoryHelper.getCategoryLightColor(category),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Center(
+              child: Text(
+                CategoryHelper.getCategoryEmoji(category),
+                style: const TextStyle(fontSize: 38),
+              ),
+            ),
+          ),
         ),
       );
     }
 
     return ClipRRect(
-      borderRadius:
-          BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(12),
       child: Image.network(
         imageUrl,
         width: 85,
         height: 85,
         fit: BoxFit.cover,
-
-        errorBuilder:
-            (context, error, stackTrace) {
-          return Container(
+        errorBuilder: (context, error, stackTrace) {
+          return Image.asset(
+            fallbackAsset,
             width: 85,
             height: 85,
-            decoration: BoxDecoration(
-              color:
-                  const Color(0xffE8F4F8),
-              borderRadius:
-                  BorderRadius.circular(12),
-            ),
-            child: const Icon(
-              Icons.set_meal,
-              size: 45,
-              color:
-                  Color(0xff0A4D68),
+            fit: BoxFit.cover,
+            errorBuilder: (ctx, err, stack) => Container(
+              width: 85,
+              height: 85,
+              decoration: BoxDecoration(
+                color: CategoryHelper.getCategoryLightColor(category),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Center(
+                child: Text(
+                  CategoryHelper.getCategoryEmoji(category),
+                  style: const TextStyle(fontSize: 38),
+                ),
+              ),
             ),
           );
         },
       ),
     );
   }
+
 
   // ================================================================
   // BOTTOM SUMMARY
@@ -700,7 +732,7 @@ class _BuyerCartScreenState extends State<BuyerCartScreen> {
                   _goToCheckout(items);
                 },
                 icon: const Icon(
-                  Icons.shopping_cart_checkout,
+                  Icons.shopping_bag_rounded,
                 ),
                 label: const Text(
                   'PROCEED TO CHECKOUT',
